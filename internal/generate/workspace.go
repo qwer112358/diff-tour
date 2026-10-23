@@ -66,15 +66,29 @@ func extract(repo *git.Repo, ref, dir string) error {
 	if err != nil {
 		return err
 	}
+	err = untar(r, dir)
+	if err == nil {
+		// tar.Reader stops at the end-of-archive marker, but git pads the archive to a whole 10 KiB record after it.
+		// Read that padding too: a pipe on Windows holds only about 4 KiB, so git would block writing it and never exit.
+		_, err = io.Copy(io.Discard, r)
+	}
+	if err != nil {
+		r.Close()
+		wait()
+		return err
+	}
+	return wait()
+}
+
+// untar writes the regular files and directories of a tar stream into dir.
+func untar(r io.Reader, dir string) error {
 	tr := tar.NewReader(r)
 	for {
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
-			break
+			return nil
 		}
 		if err != nil {
-			r.Close()
-			wait()
 			return err
 		}
 		// Reject paths that point outside the destination.
@@ -104,7 +118,6 @@ func extract(repo *git.Repo, ref, dir string) error {
 			// Do not export symlinks and the like (so nothing outside the working directory can be read).
 		}
 	}
-	return wait()
 }
 
 // copyWorktree exports the working-tree files that may be read (tracked ones and untracked ones that are not ignored).
