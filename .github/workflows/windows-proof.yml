@@ -1,0 +1,40 @@
+name: Windows export proof
+
+# Runs TestPrepareWorkspace on Windows before and after the patch from
+# https://github.com/init-co-jp/diff-tour/issues/3.
+# Before the patch it should hang in extract (git archive never exits), after it the test should pass.
+# core.autocrlf is off so that git archive writes LF, as the test expects.
+
+on:
+  push:
+    branches: [windows-proof]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: eeaf897, before the patch
+            ref: eeaf897ce18e37018540d6b425accbed4945389c
+          - name: 0142266, with the patch
+            ref: 01422662baacddab5979bf7234f82ec4ce42f636
+    name: ${{ matrix.name }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: "false"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.ref }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go test ./internal/generate/ -run '^TestPrepareWorkspace$' -count=1 -v -timeout 2m
